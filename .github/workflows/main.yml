@@ -1,0 +1,31 @@
+name: CRM Parser Weekly
+
+on:
+  schedule:
+    - cron: '0 18 * * 6'   # суббота 18:00 UTC = воскресенье 02:00 Бали
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install python deps
+        run: |
+          pip install requests gspread openai google-cloud-speech oauth2client
+
+      - name: Run script
+        run: python main.py
