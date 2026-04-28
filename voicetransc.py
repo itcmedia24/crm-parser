@@ -96,7 +96,7 @@ def get_deals():
     start = 0
     all_items = []
 
-    date_from = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+    date_from = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     # 🔥 выбор поля
     date_field = ">=DATE_CREATE" if USE_CREATE_DATE == 1 else ">=DATE_MODIFY"
