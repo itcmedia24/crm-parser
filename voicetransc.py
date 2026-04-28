@@ -17,16 +17,15 @@ BITRIX_DOMAIN = "https://itcmedia.bitrix24.ru"
 SAVE_FOLDER = "records"
 CACHE_FILE = "processed_calls.json"
 
-FFMPEG_PATH = "/opt/homebrew/bin/ffmpeg"
+# ✅ теперь универсально
+FFMPEG_PATH = "ffmpeg"
 
-# 🔥 ФЛАГ
-# 1 = по дате создания
-# 0 = по дате изменения
 USE_CREATE_DATE = 0
 
 os.makedirs(SAVE_FOLDER, exist_ok=True)
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "ai-rop-494104-8585ff623df3.json"
+# ❗️ ВАЖНО: ничего не задаем руками
+# credentials подхватятся из окружения (GitHub Actions)
 
 client = speech.SpeechClient()
 
@@ -53,7 +52,8 @@ processed = load_cache()
 def safe_request(url, payload):
     try:
         return requests.post(url, json=payload, timeout=20).json()
-    except:
+    except Exception as e:
+        print("❌ Request error:", e)
         return {}
 
 def parse_date(t):
@@ -82,7 +82,6 @@ def already_in_timeline(deal_id, activity_id):
 
     for x in data.get("result", []):
         txt = (x.get("COMMENT") or "").lower()
-
         if f"activity_id={activity_id}" in txt:
             return True
 
@@ -97,8 +96,6 @@ def get_deals():
     all_items = []
 
     date_from = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-    # 🔥 выбор поля
     date_field = ">=DATE_CREATE" if USE_CREATE_DATE == 1 else ">=DATE_MODIFY"
 
     while True:
@@ -119,11 +116,10 @@ def get_deals():
     return all_items
 
 # =========================
-# ЗВОНКИ (3 последних)
+# ЗВОНКИ
 # =========================
 
 def get_calls(deal_id):
-
     start = 0
     all_calls = []
 
@@ -149,7 +145,6 @@ def get_calls(deal_id):
     calls = []
 
     for a in all_calls:
-
         if not a.get("FILES"):
             continue
 
@@ -195,7 +190,8 @@ def download_audio(url, path):
 
         return os.path.getsize(path) > 10000
 
-    except:
+    except Exception as e:
+        print("❌ Download error:", e)
         return False
 
 # =========================
@@ -203,15 +199,18 @@ def download_audio(url, path):
 # =========================
 
 def convert_to_wav(input_path, output_path):
-    subprocess.run([
+    result = subprocess.run([
         FFMPEG_PATH,
         "-y",
         "-i", input_path,
         "-ac", "1",
         "-ar", "16000",
-        "-f", "wav",
         output_path
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], capture_output=True)
+
+    if result.returncode != 0:
+        print("❌ ffmpeg error:", result.stderr.decode())
+        return False
 
     return os.path.exists(output_path)
 
@@ -247,12 +246,10 @@ def split_audio(input_path, chunk_length=50):
 # =========================
 
 def transcribe(file_path):
-
     chunks = split_audio(file_path)
     full_text = ""
 
     for chunk in chunks:
-
         with open(chunk, "rb") as f:
             content = f.read()
 
@@ -271,8 +268,8 @@ def transcribe(file_path):
             for r in response.results:
                 full_text += r.alternatives[0].transcript + " "
 
-        except:
-            continue
+        except Exception as e:
+            print("❌ Speech error:", e)
 
     return full_text.strip()
 
