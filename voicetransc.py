@@ -69,21 +69,31 @@ def format_time(t):
     return t or "—"
 
 # =========================
-# ПРОВЕРКА ДУБЛЯ
+# ПРОВЕРКА ДУБЛЯ (с пагинацией + правильный тип)
 # =========================
 
 def already_in_timeline(deal_id, activity_id):
-    data = safe_request(BITRIX_WEBHOOK + "crm.timeline.comment.list", {
-        "filter": {
-            "ENTITY_TYPE": "deal",
-            "ENTITY_ID": deal_id
-        }
-    })
+    start = 0
+    search_str = f"activity_id={str(activity_id)}"
 
-    for x in data.get("result", []):
-        txt = (x.get("COMMENT") or "").lower()
-        if f"activity_id={activity_id}" in txt:
-            return True
+    while True:
+        data = safe_request(BITRIX_WEBHOOK + "crm.timeline.comment.list", {
+            "filter": {
+                "ENTITY_TYPE": "deal",
+                "ENTITY_ID": deal_id
+            },
+            "start": start
+        })
+
+        for x in data.get("result", []):
+            txt = (x.get("COMMENT") or "")
+            if search_str in txt:
+                return True
+
+        if "next" not in data:
+            break
+
+        start = data["next"]
 
     return False
 
@@ -311,10 +321,12 @@ for deal in get_deals():
 
         aid = str(call["activity_id"])
 
+        # Кеш — первый уровень защиты (быстро, без запроса к API)
         if aid in processed:
             print("⏭ Уже в кеше:", aid)
             continue
 
+        # Bitrix — второй уровень защиты (с пагинацией)
         if already_in_timeline(deal["ID"], aid):
             print("⏭ Уже есть в Bitrix:", aid)
             processed.add(aid)
@@ -328,6 +340,10 @@ for deal in get_deals():
 
         if not download_audio(call["url"], raw_path):
             continue
+
+        # ✅ Сразу помечаем в кеш — чтобы не повторять если скрипт упадёт на середине
+        processed.add(aid)
+        save_cache(processed)
 
         print("🔄 Конвертация")
 
@@ -350,8 +366,5 @@ for deal in get_deals():
             text,
             call["time"]
         )
-
-        processed.add(aid)
-        save_cache(processed)
 
 print("\n🚀 Готово")
